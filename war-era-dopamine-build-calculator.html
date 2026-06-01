@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WarEra · Case Farming Build Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111420;
+    --surface2: #181d2e;
+    --border: #1e2540;
+    --accent: #e8c840;
+    --accent2: #ff6b35;
+    --good: #4ade80;
+    --muted: #4a5270;
+    --text: #cdd5f0;
+    --text-dim: #6b7499;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 0;
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% 0%, rgba(232,200,64,0.06) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 59px, rgba(30,37,64,0.4) 60px),
+      repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(30,37,64,0.2) 60px);
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    background: rgba(10,12,16,0.9);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+  header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(232,200,64,0.3);
+  }
+  header span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: calc(100vh - 69px);
+  }
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+  }
+  .main {
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .field {
+    margin-bottom: 12px;
+  }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+    letter-spacing: 1px;
+  }
+  .field input[type="number"], .field select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    -moz-appearance: textfield;
+  }
+  .field input::-webkit-outer-spin-button,
+  .field input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface2); }
+
+  .skill-row {
+    display: grid;
+    grid-template-columns: 1fr 44px 44px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .skill-name {
+    font-size: 12px;
+    color: var(--text);
+  }
+  .skill-name small {
+    color: var(--text-dim);
+    font-size: 10px;
+    display: block;
+  }
+  .skill-val {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    text-align: center;
+    padding: 5px 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .skill-cost-disp {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  .sp-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  .sp-bar .sp-label { font-size: 12px; color: var(--text-dim); }
+  .sp-bar .sp-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+  }
+  .sp-bar .sp-val.ok { color: var(--good); }
+  .sp-bar .sp-val.warn { color: var(--accent2); }
+
+  .btn {
+    background: var(--accent);
+    color: #0a0c10;
+    border: none;
+    padding: 12px 24px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 3px;
+    cursor: pointer;
+    width: 100%;
+    transition: opacity 0.15s, transform 0.1s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn.secondary {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 13px;
+    padding: 8px 16px;
+    letter-spacing: 2px;
+    width: auto;
+  }
+
+  /* Results */
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+    transition: border-color 0.2s;
+    animation: fadeUp 0.3s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-card:hover { border-color: var(--accent); }
+  .result-card.highlight {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--surface), rgba(232,200,64,0.04));
+  }
+  .result-card .card-badge {
+    position: absolute;
+    top: -1px; right: -1px;
+    background: var(--accent);
+    color: #0a0c10;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 3px 8px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .stat-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(30,37,64,0.5);
+    font-size: 12px;
+  }
+  .stat-line:last-child { border-bottom: none; }
+  .stat-line .k { color: var(--text-dim); }
+  .stat-line .v {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-line .v.accent { color: var(--accent); }
+  .stat-line .v.good { color: var(--good); }
+  .stat-line .v.warn { color: var(--accent2); }
+
+  .skill-alloc {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .skill-alloc-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .alloc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+  }
+  .alloc-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .alloc-row span:last-child {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 40px;
+    color: var(--text-dim);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .empty-state p { font-size: 13px; line-height: 1.7; }
+
+  .info-box {
+    background: rgba(232,200,64,0.05);
+    border: 1px solid rgba(232,200,64,0.15);
+    padding: 12px 14px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .info-box strong { color: var(--accent); }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    gap: 0;
+  }
+  .tab {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .formula-block {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.8;
+    margin-top: 8px;
+  }
+  .formula-block .comment { color: var(--muted); }
+
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>WARERA</h1>
+  <span>⚔ Case Farming Build Optimizer</span>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div>
+      <div class="section-label">Player Info</div>
+      <div class="field">
+        <label>Player Level</label>
+        <input type="number" id="playerLevel" value="20" min="1" max="100" oninput="updateSP()">
+      </div>
+      <div class="field">
+        <label>Desired Number of Companies <small style="color:var(--text-dim)" id="companySPHint">(base: 2 free, no SP needed)</small></label>
+        <input type="number" id="companiesDesired" value="2" min="2" max="12" oninput="updateSP()">
+      </div>
+      <div class="field">
+        <label>Military Rank Bonus (%)</label>
+        <input type="number" id="rankBonus" value="0" min="0" max="100">
+      </div>
+      <div class="sp-bar" style="margin-top:4px">
+        <span class="sp-label">Available SP for combat</span>
+        <span class="sp-val ok" id="availSPDisplay">76</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Gear Bonuses (from equipment)</div>
+      <div class="field">
+        <label>Weapon Attack Bonus (%)</label>
+        <input type="number" id="gearAtk" value="0" min="0" max="200">
+      </div>
+      <div class="field">
+        <label>Helmet Crit Damage Bonus (%)</label>
+        <input type="number" id="gearCritDmg" value="0" min="0" max="100">
+      </div>
+      <div class="field">
+        <label>Chest Armor Bonus (%)</label>
+        <input type="number" id="gearChest" value="0" min="0" max="20">
+      </div>
+      <div class="field">
+        <label>Pants Armor Bonus (%)</label>
+        <input type="number" id="gearPants" value="0" min="0" max="20">
+      </div>
+      <div class="field">
+        <label>Boots Dodge Bonus (%)</label>
+        <input type="number" id="gearDodge" value="0" min="0" max="30">
+      </div>
+      <div class="field">
+        <label>Gloves Precision Bonus (%)</label>
+        <input type="number" id="gearPrec" value="0" min="0" max="30">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Consumables</div>
+      <div class="field">
+        <label>Ammo Type</label>
+        <select id="ammoType">
+          <option value="0">None</option>
+          <option value="10">Light Ammo (+10%)</option>
+          <option value="20" selected>Ammo (+20%)</option>
+          <option value="40">Heavy Ammo (+40%)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Use Pills (+80% Damage)</label>
+        <select id="usePill">
+          <option value="0">No</option>
+          <option value="80">Yes</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Food Type (healing)</label>
+        <select id="foodType">
+          <option value="10">Bread (10% of max HP)</option>
+          <option value="15" selected>Steak (15% of max HP)</option>
+          <option value="20">Cooked Fish (20% of max HP)</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn" onclick="optimize()">OPTIMIZE BUILD</button>
+    <div class="info-box">
+      <strong>Base case chance:</strong> 5% per hit. Each Loot Chance skill level adds +2%/hit (max 25% at Lv 10). Cases can stack beyond 100% (multiple per hour). <strong>Loot Chance unlocks at player level 10</strong> and is the only skill that directly increases case drops.
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('results', this)">Results</div>
+      <div class="tab" onclick="switchTab('guide', this)">How It Works</div>
+      <div class="tab" onclick="switchTab('manual', this)">Manual Planner</div>
+    </div>
+
+    <div id="tab-results">
+      <div id="resultsArea">
+        <div class="empty-state">
+          <div class="icon">🎁</div>
+          <p>Configure your player info and click <strong style="color:var(--accent)">OPTIMIZE BUILD</strong><br>to see the best skill allocations for farming cases in battles.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-guide" style="display:none">
+      <div class="section-label">Case Farming Formula</div>
+      <div class="formula-block">
+        <span class="comment"># HP pool per hour</span><br>
+        food_heal = food_pct% × max_health<br>
+        effective_hp = health + (hunger × food_heal)<br><br>
+        <span class="comment"># Hits per hour (HP spent per attack, dodge = free hit, 0 HP cost)</span><br>
+        dmg_per_hit = 10 × (1 − armor%)<br>
+        non_dodged_hits = effective_hp / dmg_per_hit<br>
+        total_attempts = non_dodged_hits / (1 − dodge%)<br>
+        landed_hits = total_attempts × precision%<br><br>
+        <span class="comment"># Cases only proc on landed hits</span><br>
+        cases = landed_hits × loot_chance%<br><br>
+        <span class="comment"># Daily: hour 1 = full HP+hunger, hours 2-24 = regen (carries over)</span><br>
+        hp_regen = max_health × 10% / hour<br>
+        hunger_regen = max_hunger × 10% / hour<br>
+        cases_per_day = cases_hour1 + Σ(cases_hour2..24)<br><br>
+        <span class="comment"># Damage (tiebreaker only, does not affect cases)</span><br>
+        avg_dmg = attack × (1 + crit_chance% × (crit_dmg% − 1))<br>
+        dmg_per_day = avg_dmg × total_landed_hits_per_day<br>
+      </div>
+    </div>
+
+
+    <div id="tab-manual" style="display:none">
+      <div class="section-label">Manual Skill Planner</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div class="section-label">Combat Skills</div>
+          <div id="manualCombat"></div>
+        </div>
+        <div>
+          <div class="section-label">Special & Economic</div>
+          <div id="manualSpecial"></div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="sp-bar">
+          <span class="sp-label">Skill Points Used</span>
+          <span class="sp-val" id="manualSPUsed">0</span>
+        </div>
+        <div class="sp-bar">
+          <span class="sp-label">SP Remaining</span>
+          <span class="sp-val ok" id="manualSPLeft">—</span>
+        </div>
+      </div>
+      <div id="manualStats" style="margin-top:16px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Game Data ────────────────────────────────────────────────────────────────
+const SKILLS = {
+  attack:    { name: 'Attack',       vals: [100,120,140,160,180,200,220,240,260,280,300], costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 1,  unit: '' },
+  precision: { name: 'Precision',    vals: [50,55,60,65,70,75,80,85,90,95,100],          costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 1,  unit: '%' },
+  critChance:{ name: 'Crit Chance',  vals: [10,15,20,25,30,35,40,45,50,55,60],           costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 5,  unit: '%' },
+  critDmg:   { name: 'Crit Damage',  vals: [100,120,140,160,180,200,220,240,260,280,300],costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 10, unit: '%' },
+  armor:     { name: 'Armor',        vals: [0,6,12,18,24,30,36,42,48,54,60],             costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 5,  unit: '%' },
+  dodge:     { name: 'Dodge',        vals: [0,4,8,12,16,20,24,28,32,36,40],              costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 10, unit: '%' },
+  health:    { name: 'Health',       vals: [100,110,120,130,140,150,160,170,180,190,200], costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 5,  unit: 'HP' },
+  hunger:    { name: 'Hunger',       vals: [4,5,6,7,8,9,10,11,12,13,14],                costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 5,  unit: '' },
+  loot:      { name: 'Loot Chance',  vals: [5,7,9,11,13,15,17,19,21,23,25],             costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 10, unit: '%' },
+  companies: { name: 'Companies',    vals: [2,3,4,5,6,7,8,9,10,11,12],                  costs: [0,1,2,3,4,5,6,7,8,9,10], unlocksAt: 1,  unit: '' },
+};
+
+function totalCost(skill, level) {
+  return SKILLS[skill].costs.slice(1, level+1).reduce((a,b)=>a+b, 0);
+}
+
+function calcStats(alloc, gear, ammo, pill, rank, foodHeal) {
+  const atk = SKILLS.attack.vals[alloc.attack] * (1 + (gear.atk||0)/100) * (1 + ammo/100) * (1 + pill/100) * (1 + rank/100);
+  const prec = Math.min(100, SKILLS.precision.vals[alloc.precision] + (gear.prec||0)) / 100;
+  const cc = SKILLS.critChance.vals[alloc.critChance] / 100;
+  const cd = (SKILLS.critDmg.vals[alloc.critDmg] + (gear.critDmg||0)) / 100;
+  const armor = Math.min(80, SKILLS.armor.vals[alloc.armor] + (gear.armor||0)) / 100;
+  const dodge = Math.min(80, SKILLS.dodge.vals[alloc.dodge] + (gear.dodge||0)) / 100;
+  const hp = SKILLS.health.vals[alloc.health];
+  const hunger = SKILLS.hunger.vals[alloc.hunger];
+  const loot = SKILLS.loot.vals[alloc.loot];
+
+  // Effective HP = base health + (hunger slots x HP restored per food, which is foodPct% of max HP)
+  const effectiveHp = hp + (hunger * (foodHeal || 0));
+
+  // Damage per hit that connects (dodge = 0 damage, armor reduces damage on hits that land)
+  const dmgPerNonDodgedHit = 10 * (1 - armor);
+  // Non-dodged hits you can take before running out of HP
+  const nonDodgedHits = dmgPerNonDodgedHit > 0 ? effectiveHp / dmgPerNonDodgedHit : effectiveHp / 10;
+  // Total attempts = non-dodged hits / (1 - dodge%), since dodge% of attempts deal 0 damage
+  const hits = dodge < 1 ? nonDodgedHits / (1 - dodge) : nonDodgedHits;
+  // Cases only proc on landed hits (precision), not misses or dodges
+  const landedHits = hits * prec;
+  const expectedCases = landedHits * (loot / 100);
+
+  // Avg damage per hit and total expected damage per day (only landed hits deal damage)
+  const avgDmg = atk * (1 + cc * (cd - 1));
+  const totalDmg = avgDmg * landedHits;
+
+  // Daily calculation: hour 1 starts with full HP + full hunger, hours 2-24 use regen amounts
+  const hpPerHitSafe = dmgPerNonDodgedHit > 0 ? dmgPerNonDodgedHit : 10;
+
+  // Hour 1: full resources
+  const nonDodgedHour1 = effectiveHp / hpPerHitSafe;
+  const hitsHour1 = dodge < 1 ? nonDodgedHour1 / (1 - dodge) : nonDodgedHour1;
+  const landedHour1 = hitsHour1 * prec;
+  const casesHour1 = landedHour1 * (loot / 100);
+  const dmgHour1 = avgDmg * landedHour1;
+
+  // Hours 2-24: simulate hunger accumulation as decimal with carryover
+  // hunger regens at 10% of max slots per hour (e.g. 7 hunger = 0.7/hr), carries over fractional amounts
+  const hpRegenPerHour = hp * 0.10;
+  const foodHealPerSlot = foodHeal; // foodHeal is already per-slot (foodPct% * hp)
+  const hungerRegenRate = hunger * 0.10;
+
+  // Simulate hours 2-24 with both HP and hunger carrying over fractional amounts
+  let totalCasesRegen = 0;
+  let totalDmgRegen = 0;
+  let hungerAccum = 0;
+  let hpAccum = 0;
+  for (let h = 0; h < 23; h++) {
+    hungerAccum += hungerRegenRate;
+    hpAccum += hpRegenPerHour;
+    const slotsAvailable = Math.floor(hungerAccum);
+    hungerAccum -= slotsAvailable;
+    // Total usable HP this hour = accumulated HP regen + food from available hunger slots
+    const hpFromFood = slotsAvailable * foodHealPerSlot;
+    const totalHpThisHour = hpAccum + hpFromFood;
+    // Spend all HP this hour (including carryover)
+    hpAccum = 0;
+    const nonDodgedThisHour = totalHpThisHour / hpPerHitSafe;
+    const hitsThisHour = dodge < 1 ? nonDodgedThisHour / (1 - dodge) : nonDodgedThisHour;
+    const landedThisHour = hitsThisHour * prec;
+    totalCasesRegen += landedThisHour * (loot / 100);
+    totalDmgRegen += avgDmg * landedThisHour;
+  }
+
+  const casesPerDay = casesHour1 + totalCasesRegen;
+  const dmgPerDay = dmgHour1 + totalDmgRegen;
+
+  // SP used
+  const spUsed = Object.keys(alloc).reduce((s, k) => s + totalCost(k, alloc[k]), 0);
+
+  return { atk, prec: prec*100, cc: cc*100, cd: cd*100, armor: armor*100, dodge: dodge*100, hp, effectiveHp, hunger, loot, hits: hits.toFixed(1), expectedCases: expectedCases.toFixed(2), avgDmg: avgDmg.toFixed(0), totalDmg: totalDmg.toFixed(0), casesPerDay: casesPerDay.toFixed(1), dmgPerDay: Math.round(dmgPerDay), spUsed };
+}
+
+function score(stats) {
+  // Primary: cases per day. Secondary: damage per day as tiebreaker (scaled so it never overrides cases)
+  return parseFloat(stats.casesPerDay) + stats.dmgPerDay * 0.000000001;
+}
+
+// ─── Optimizer ───────────────────────────────────────────────────────────────
+function getAvailSP() {
+  const playerLevel = parseInt(document.getElementById('playerLevel').value) || 1;
+  const companiesDesired = parseInt(document.getElementById('companiesDesired').value) || 2;
+  const totalSP = 4 + (playerLevel - 1) * 4; // 4 base + 4 per level
+  // companies vals = [2,3,4,...,12], so skill level = desired - 2 (clamped 0-10)
+  const companiesLvl = Math.max(0, Math.min(10, companiesDesired - 2));
+  const companySPCost = totalCost('companies', companiesLvl);
+  return Math.max(0, totalSP - companySPCost);
+}
+
+function updateSP() {
+  const sp = getAvailSP();
+  const el = document.getElementById('availSPDisplay');
+  if (el) el.textContent = sp;
+  // Update hint showing SP cost for companies
+  const desired = parseInt(document.getElementById('companiesDesired').value) || 2;
+  const lvl = Math.max(0, Math.min(10, desired - 2));
+  const cost = totalCost('companies', lvl);
+  const hint = document.getElementById('companySPHint');
+  if (hint) hint.textContent = lvl === 0 ? '(base: 2 free, no SP needed)' : `(requires ${cost} SP — ${lvl} skill level${lvl>1?'s':''})`;
+}
+
+function optimize() {
+  const playerLevel = parseInt(document.getElementById('playerLevel').value) || 1;
+  const availSP = getAvailSP();
+  const rank = parseInt(document.getElementById('rankBonus').value) || 0;
+  const gear = {
+    atk: parseInt(document.getElementById('gearAtk').value)||0,
+    critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
+    armor: (parseInt(document.getElementById('gearChest').value)||0) + (parseInt(document.getElementById('gearPants').value)||0),
+    dodge: parseInt(document.getElementById('gearDodge').value)||0,
+    prec: parseInt(document.getElementById('gearPrec').value)||0,
+  };
+  const ammo = parseInt(document.getElementById('ammoType').value)||0;
+  const pill = parseInt(document.getElementById('usePill').value)||0;
+  const foodPct = parseInt(document.getElementById('foodType').value)||0;
+
+  function canUnlock(skill) {
+    return playerLevel >= SKILLS[skill].unlocksAt;
+  }
+
+  const builds = [];
+
+  // Fully exhaustive search over all case-relevant skills:
+  // loot, health, precision, hunger, armor, dodge
+  // attack and critChance are greedy with leftover SP (they only affect damage not cases)
+  // critDamage is always 0 in optimizer (only affects damage)
+  const caseSkills = ['loot','health','precision','hunger','armor','dodge'];
+
+  function search(idx, spLeft, alloc) {
+    if (idx === caseSkills.length) {
+      // Fill remaining SP greedily into attack then critChance for damage tiebreaker
+      let rem = spLeft;
+      let atkLvl = 0;
+      if (canUnlock('attack')) {
+        while (atkLvl < 10 && rem >= SKILLS.attack.costs[atkLvl+1]) {
+          rem -= SKILLS.attack.costs[atkLvl+1]; atkLvl++;
+        }
+      }
+      let ccLvl = 0;
+      if (canUnlock('critChance')) {
+        while (ccLvl < 10 && rem >= SKILLS.critChance.costs[ccLvl+1]) {
+          rem -= SKILLS.critChance.costs[ccLvl+1]; ccLvl++;
+        }
+      }
+      const fullAlloc = { ...alloc, attack: atkLvl, critChance: ccLvl, critDmg: 0 };
+      const foodHeal = (foodPct / 100) * SKILLS.health.vals[fullAlloc.health];
+      const stats = calcStats(fullAlloc, gear, ammo, pill, rank, foodHeal);
+      builds.push({ alloc: fullAlloc, stats, score: score(stats) });
+      return;
+    }
+    const skill = caseSkills[idx];
+    if (!canUnlock(skill)) {
+      search(idx + 1, spLeft, { ...alloc, [skill]: 0 });
+      return;
+    }
+    for (let lvl = 0; lvl <= 10; lvl++) {
+      const cost = totalCost(skill, lvl);
+      if (cost > spLeft) break;
+      search(idx + 1, spLeft - cost, { ...alloc, [skill]: lvl });
+    }
+  }
+
+  search(0, availSP, {});
+
+  builds.sort((a,b) => b.score - a.score);
+
+  // De-duplicate top results
+  const seen = new Set();
+  const top = [];
+  for (const b of builds) {
+    const key = `${b.alloc.loot}-${b.alloc.health}-${b.alloc.precision}-${b.alloc.hunger}-${b.alloc.armor}-${b.alloc.dodge}`;
+    if (!seen.has(key) && top.length < 6) {
+      seen.add(key);
+      top.push(b);
+    }
+  }
+
+  renderResults(top, availSP);
+}
+
+function renderResults(builds, availSP) {
+  const area = document.getElementById('resultsArea');
+  if (!builds.length) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">⚠</div><p>No valid builds found for given SP.</p></div>';
+    return;
+  }
+
+  const html = `
+    <div class="info-box" style="margin-bottom:16px">
+      Showing top builds ranked by <strong>case farming efficiency</strong> (loot weight × survivability weight). Adjust sliders to change priorities.
+    </div>
+    <div class="result-grid">
+      ${builds.map((b, i) => {
+        const { alloc, stats } = b;
+        const isTop = i === 0;
+        return `
+        <div class="result-card ${isTop ? 'highlight' : ''}" style="animation-delay:${i*0.06}s">
+          ${isTop ? '<div class="card-badge">⭐ Recommended</div>' : ''}
+          <div class="card-title">${isTop ? 'Optimal' : `Alt Build ${i}`}</div>
+          <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${stats.casesPerDay}</span></div>
+          <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${stats.dmgPerDay.toLocaleString()}</span></div>
+          <div class="stat-line"><span class="k">Loot Chance/Hit</span><span class="v accent">${stats.loot}%</span></div>
+          <div class="stat-line"><span class="k">Avg Damage/Hit</span><span class="v">${stats.avgDmg}</span></div>
+          <div class="stat-line"><span class="k">Expected Damage/Battle</span><span class="v accent">${stats.totalDmg}</span></div>
+          <div class="stat-line"><span class="k">Base Health</span><span class="v">${stats.hp} HP</span></div>
+          <div class="stat-line"><span class="k">Effective HP (w/ food)</span><span class="v good">${stats.effectiveHp} HP</span></div>
+          <div class="stat-line"><span class="k">Precision</span><span class="v">${stats.prec.toFixed(0)}%</span></div>
+          <div class="stat-line"><span class="k">SP Used / Available</span><span class="v ${stats.spUsed > availSP ? 'warn' : ''}">${stats.spUsed} / ${availSP}</span></div>
+          <div class="skill-alloc">
+            <div class="skill-alloc-title">Skill Allocation</div>
+            <div class="alloc-grid">
+              <div class="alloc-row"><span>Attack</span><span>Lv ${alloc.attack} (${SKILLS.attack.vals[alloc.attack]})</span></div>
+              <div class="alloc-row"><span>Precision</span><span>Lv ${alloc.precision} (${stats.prec.toFixed(0)}%)</span></div>
+              <div class="alloc-row"><span>Crit Chance</span><span>Lv ${alloc.critChance} (${stats.cc.toFixed(0)}%)</span></div>
+              <div class="alloc-row"><span>Crit Damage</span><span>Lv ${alloc.critDmg} (${stats.cd.toFixed(0)}%)</span></div>
+              <div class="alloc-row"><span>Armor</span><span>Lv ${alloc.armor} (${stats.armor.toFixed(0)}%)</span></div>
+              <div class="alloc-row"><span>Dodge</span><span>Lv ${alloc.dodge} (${stats.dodge.toFixed(0)}%)</span></div>
+              <div class="alloc-row"><span>Health</span><span>Lv ${alloc.health} (${stats.hp}HP)</span></div>
+              <div class="alloc-row"><span>Loot Chance</span><span>Lv ${alloc.loot} (${stats.loot}%)</span></div>
+              <div class="alloc-row"><span>Hunger</span><span>Lv ${alloc.hunger} (${SKILLS.hunger.vals[alloc.hunger]})</span></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  area.innerHTML = html;
+}
+
+
+// ─── Manual Planner ───────────────────────────────────────────────────────────
+const manualAlloc = { attack:0, precision:0, critChance:0, critDmg:0, armor:0, dodge:0, health:0, hunger:0, loot:0 };
+
+function buildManualUI() {
+  const combatDiv = document.getElementById('manualCombat');
+  const specialDiv = document.getElementById('manualSpecial');
+  const combatKeys = ['attack','precision','critChance','critDmg','armor','dodge','health','hunger'];
+  const specialKeys = ['loot'];
+
+  function makeRow(key) {
+    const sk = SKILLS[key];
+    return `<div class="skill-row" id="row-${key}">
+      <div class="skill-name">${sk.name}<small>Lv <span id="mLvl-${key}">0</span> — <span id="mVal-${key}">${sk.vals[0]}${sk.unit}</span></small></div>
+      <div style="display:flex;gap:4px">
+        <button onclick="adjustSkill('${key}',-1)" style="background:var(--surface);border:1px solid var(--border);color:var(--text);width:22px;height:28px;cursor:pointer;font-size:14px">−</button>
+        <button onclick="adjustSkill('${key}',1)" style="background:var(--surface);border:1px solid var(--border);color:var(--accent);width:22px;height:28px;cursor:pointer;font-size:14px">+</button>
+      </div>
+      <div class="skill-cost-disp" id="mCost-${key}">0 SP</div>
+    </div>`;
+  }
+
+  combatDiv.innerHTML = combatKeys.map(makeRow).join('');
+  specialDiv.innerHTML = specialKeys.map(makeRow).join('');
+  updateManualStats();
+}
+
+function adjustSkill(key, delta) {
+  const newLvl = manualAlloc[key] + delta;
+  if (newLvl < 0 || newLvl > 10) return;
+  manualAlloc[key] = newLvl;
+  const sk = SKILLS[key];
+  document.getElementById(`mLvl-${key}`).textContent = newLvl;
+  document.getElementById(`mVal-${key}`).textContent = `${sk.vals[newLvl]}${sk.unit}`;
+  document.getElementById(`mCost-${key}`).textContent = `${totalCost(key, newLvl)} SP`;
+  updateManualStats();
+}
+
+function updateManualStats() {
+  const spUsed = Object.keys(manualAlloc).reduce((s,k) => s + totalCost(k, manualAlloc[k]), 0);
+  const avail = getAvailSP();
+  const left = avail - spUsed;
+  document.getElementById('manualSPUsed').textContent = spUsed;
+  const leftEl = document.getElementById('manualSPLeft');
+  leftEl.textContent = left;
+  leftEl.className = `sp-val ${left < 0 ? 'warn' : 'ok'}`;
+
+  const gear = {
+    atk: parseInt(document.getElementById('gearAtk').value)||0,
+    critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
+    armor: (parseInt(document.getElementById('gearChest').value)||0) + (parseInt(document.getElementById('gearPants').value)||0),
+    dodge: parseInt(document.getElementById('gearDodge').value)||0,
+    prec: parseInt(document.getElementById('gearPrec').value)||0,
+  };
+  const ammo = parseInt(document.getElementById('ammoType').value)||0;
+  const pill = parseInt(document.getElementById('usePill').value)||0;
+  const rank = parseInt(document.getElementById('rankBonus').value)||0;
+  const foodPct = parseInt(document.getElementById('foodType').value)||0;
+  const foodHeal = (foodPct / 100) * SKILLS.health.vals[manualAlloc.health];
+  const stats = calcStats(manualAlloc, gear, ammo, pill, rank, foodHeal);
+
+  document.getElementById('manualStats').innerHTML = `
+    <div class="result-card">
+      <div class="card-title">Live Preview</div>
+      <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${stats.casesPerDay}</span></div>
+      <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${stats.dmgPerDay.toLocaleString()}</span></div>
+      <div class="stat-line"><span class="k">Loot Chance/Hit</span><span class="v accent">${stats.loot}%</span></div>
+      <div class="stat-line"><span class="k">Avg Damage/Hit</span><span class="v">${stats.avgDmg}</span></div>
+      <div class="stat-line"><span class="k">Expected Damage/Battle</span><span class="v accent">${stats.totalDmg}</span></div>
+      <div class="stat-line"><span class="k">Base Health</span><span class="v">${stats.hp} HP</span></div>
+      <div class="stat-line"><span class="k">Effective HP (w/ food)</span><span class="v good">${stats.effectiveHp} HP</span></div>
+      <div class="stat-line"><span class="k">Precision</span><span class="v">${stats.prec.toFixed(0)}%</span></div>
+      <div class="stat-line"><span class="k">Crit Chance</span><span class="v">${stats.cc.toFixed(0)}%</span></div>
+      <div class="stat-line"><span class="k">Armor</span><span class="v">${stats.armor.toFixed(0)}%</span></div>
+      <div class="stat-line"><span class="k">Dodge</span><span class="v">${stats.dodge.toFixed(0)}%</span></div>
+    </div>`;
+}
+
+// ─── Tab Switching ────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).style.display = '';
+  el.classList.add('active');
+  if (name === 'manual') buildManualUI();
+}
+
+// Init
+buildManualUI();
+updateSP();
+</script>
+</body>
+</html>
