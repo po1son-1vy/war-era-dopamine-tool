@@ -101,7 +101,7 @@
     margin-bottom: 5px;
     letter-spacing: 1px;
   }
-  .field input[type="number"], .field select {
+  .field input[type="number"], .field input[type="text"], .field select {
     width: 100%;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -117,6 +117,29 @@
   .field input::-webkit-inner-spin-button { -webkit-appearance: none; }
   .field input:focus, .field select:focus { border-color: var(--accent); }
   .field select option { background: var(--surface2); }
+  #usernameSuggestions {
+    margin-top: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: none;
+  }
+  #usernameSuggestions.show { display: block; }
+  .username-sugg {
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .username-sugg:last-child { border-bottom: none; }
+  .username-sugg:hover, .username-sugg.active {
+    background: var(--surface);
+    color: var(--accent);
+  }
+  .username-sugg small { color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
 
   .skill-row {
     display: grid;
@@ -354,6 +377,17 @@
   <div class="sidebar">
     <div>
       <div class="section-label">Player Info</div>
+      <div class="field" style="position:relative">
+        <label>WarEra Username <small style="color:var(--text-dim)">(auto-fills level &amp; rank)</small></label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="usernameInput" placeholder="e.g. YourName" style="flex:1" autocomplete="off"
+            oninput="onUsernameType()"
+            onkeydown="handleUsernameKey(event)">
+          <button class="btn secondary" onclick="fetchPlayer()" style="white-space:nowrap;width:auto;margin:0">LOOKUP</button>
+        </div>
+        <div id="usernameSuggestions"></div>
+        <div id="lookupStatus" style="font-size:11px;margin-top:5px;min-height:14px"></div>
+      </div>
       <div class="field">
         <label>Player Level</label>
         <input type="number" id="playerLevel" value="20" min="1" max="100" oninput="updateSP()">
@@ -364,7 +398,7 @@
       </div>
       <div class="field">
         <label>Military Rank Bonus (%)</label>
-        <input type="number" id="rankBonus" value="0" min="0" max="100">
+        <input type="number" id="rankBonus" value="0" min="0" max="100" oninput="onGearChange()">
       </div>
       <div class="sp-bar" style="margin-top:4px">
         <span class="sp-label">Available SP for combat</span>
@@ -376,27 +410,23 @@
       <div class="section-label">Gear Bonuses (from equipment)</div>
       <div class="field">
         <label>Weapon Attack Bonus (%)</label>
-        <input type="number" id="gearAtk" value="0" min="0" max="200">
+        <input type="number" id="gearAtk" value="0" min="0" max="200" oninput="onGearChange()">
       </div>
       <div class="field">
         <label>Helmet Crit Damage Bonus (%)</label>
-        <input type="number" id="gearCritDmg" value="0" min="0" max="100">
+        <input type="number" id="gearCritDmg" value="0" min="0" max="100" oninput="onGearChange()">
       </div>
       <div class="field">
-        <label>Chest Armor Bonus (%)</label>
-        <input type="number" id="gearChest" value="0" min="0" max="20">
-      </div>
-      <div class="field">
-        <label>Pants Armor Bonus (%)</label>
-        <input type="number" id="gearPants" value="0" min="0" max="20">
+        <label>Armor Bonus (%) <small style="color:var(--text-dim)">(chest + pants)</small></label>
+        <input type="number" id="gearArmor" value="0" min="0" max="100" oninput="onGearChange()">
       </div>
       <div class="field">
         <label>Boots Dodge Bonus (%)</label>
-        <input type="number" id="gearDodge" value="0" min="0" max="30">
+        <input type="number" id="gearDodge" value="0" min="0" max="30" oninput="onGearChange()">
       </div>
       <div class="field">
         <label>Gloves Precision Bonus (%)</label>
-        <input type="number" id="gearPrec" value="0" min="0" max="30">
+        <input type="number" id="gearPrec" value="0" min="0" max="30" oninput="onGearChange()">
       </div>
     </div>
 
@@ -404,7 +434,7 @@
       <div class="section-label">Consumables</div>
       <div class="field">
         <label>Ammo Type</label>
-        <select id="ammoType">
+        <select id="ammoType" onchange="onGearChange()">
           <option value="0">None</option>
           <option value="10">Light Ammo (+10%)</option>
           <option value="20" selected>Ammo (+20%)</option>
@@ -413,14 +443,14 @@
       </div>
       <div class="field">
         <label>Use Pills (+60% Damage)</label>
-        <select id="usePill">
+        <select id="usePill" onchange="onGearChange()">
           <option value="0">No</option>
           <option value="60">Yes (+60% damage)</option>
         </select>
       </div>
       <div class="field">
         <label>Food Type (healing)</label>
-        <select id="foodType">
+        <select id="foodType" onchange="onGearChange()">
           <option value="10">Bread (10% of max HP)</option>
           <option value="15" selected>Steak (15% of max HP)</option>
           <option value="20">Cooked Fish (20% of max HP)</option>
@@ -437,6 +467,7 @@
   <div class="main">
     <div class="tabs">
       <div class="tab active" onclick="switchTab('results', this)">Results</div>
+      <div class="tab" onclick="switchTab('analysis', this)">My Build Analysis</div>
       <div class="tab" onclick="switchTab('guide', this)">How It Works</div>
       <div class="tab" onclick="switchTab('manual', this)">Manual Planner</div>
     </div>
@@ -446,6 +477,15 @@
         <div class="empty-state">
           <div class="icon">🎁</div>
           <p>Configure your player info and click <strong style="color:var(--accent)">OPTIMIZE BUILD</strong><br>to see the best skill allocations for farming cases in battles.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-analysis" style="display:none">
+      <div id="analysisArea">
+        <div class="empty-state">
+          <div class="icon">📊</div>
+          <p>Enter your <strong style="color:var(--accent)">WarEra username</strong> and click LOOKUP<br>to load your current build and see how it compares to the optimal one.</p>
         </div>
       </div>
     </div>
@@ -608,7 +648,8 @@ function getAvailSP() {
   // companies vals = [2,3,4,...,12], so skill level = desired - 2 (clamped 0-10)
   const companiesLvl = Math.max(0, Math.min(10, companiesDesired - 2));
   const companySPCost = totalCost('companies', companiesLvl);
-  return Math.max(0, totalSP - companySPCost);
+  // Also subtract SP spent on economic skills (energy, entrepreneurship, production, management)
+  return Math.max(0, totalSP - companySPCost - (otherSkillsSP || 0));
 }
 
 function updateSP() {
@@ -623,14 +664,303 @@ function updateSP() {
   if (hint) hint.textContent = lvl === 0 ? '(base: 2 free, no SP needed)' : `(requires ${cost} SP — ${lvl} skill level${lvl>1?'s':''})`;
 }
 
-function optimize() {
+// ─── WarEra API Lookup ─────────────────────────────────────────────────────────
+const API_BASE = 'https://api2.warera.io/trpc';
+
+// ─── Username Autocomplete ─────────────────────────────────────────────────────
+let suggestTimer = null;
+let suggestList = [];      // [{id, username}]
+let suggestActive = -1;
+
+function onUsernameType() {
+  const val = document.getElementById('usernameInput').value.trim();
+  clearTimeout(suggestTimer);
+  if (val.length < 2) { hideSuggestions(); return; }
+  // Debounce API calls
+  suggestTimer = setTimeout(() => fetchSuggestions(val), 250);
+}
+
+async function fetchSuggestions(query) {
+  try {
+    const searchUrl = `${API_BASE}/search.searchAnything?input=${encodeURIComponent(JSON.stringify({ searchText: query }))}`;
+    const res = await fetch(searchUrl);
+    if (!res.ok) return;
+    const data = await res.json();
+    const ids = (data?.result?.data?.userIds || data?.userIds || []).slice(0, 3);
+    if (!ids.length) { hideSuggestions(); return; }
+    // Hydrate usernames for the top 3 ids in parallel
+    const profiles = await Promise.all(ids.map(async id => {
+      try {
+        const u = await fetch(`${API_BASE}/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId: id }))}`);
+        if (!u.ok) return null;
+        const j = await u.json();
+        const p = j?.result?.data || j;
+        return { id, username: p?.username || '(unknown)', level: p?.leveling?.level };
+      } catch { return null; }
+    }));
+    suggestList = profiles.filter(Boolean);
+    renderSuggestions();
+  } catch { hideSuggestions(); }
+}
+
+function renderSuggestions() {
+  const box = document.getElementById('usernameSuggestions');
+  if (!suggestList.length) { hideSuggestions(); return; }
+  suggestActive = -1;
+  box.innerHTML = suggestList.map((s, i) =>
+    `<div class="username-sugg" data-i="${i}" onclick="pickSuggestion(${i})">
+      <span>${s.username}</span><small>Lv ${s.level ?? '?'}</small>
+    </div>`).join('');
+  box.classList.add('show');
+}
+
+function hideSuggestions() {
+  const box = document.getElementById('usernameSuggestions');
+  box.classList.remove('show');
+  box.innerHTML = '';
+  suggestList = [];
+  suggestActive = -1;
+}
+
+function pickSuggestion(i) {
+  const s = suggestList[i];
+  if (!s) return;
+  document.getElementById('usernameInput').value = s.username;
+  hideSuggestions();
+  fetchPlayer();
+}
+
+function handleUsernameKey(event) {
+  const box = document.getElementById('usernameSuggestions');
+  const open = box.classList.contains('show');
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    if (open && suggestActive >= 0) { pickSuggestion(suggestActive); }
+    else { hideSuggestions(); fetchPlayer(); }
+  } else if (event.key === 'ArrowDown' && open) {
+    event.preventDefault();
+    suggestActive = Math.min(suggestActive + 1, suggestList.length - 1);
+    updateActiveSuggestion();
+  } else if (event.key === 'ArrowUp' && open) {
+    event.preventDefault();
+    suggestActive = Math.max(suggestActive - 1, 0);
+    updateActiveSuggestion();
+  } else if (event.key === 'Escape') {
+    hideSuggestions();
+  }
+}
+
+function updateActiveSuggestion() {
+  document.querySelectorAll('.username-sugg').forEach((el, i) => {
+    el.classList.toggle('active', i === suggestActive);
+  });
+}
+
+async function fetchPlayer() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const status = document.getElementById('lookupStatus');
+  if (!username) {
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Enter a username first.';
+    return;
+  }
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Searching…';
+
+  try {
+    // Step 1: resolve username -> userId
+    const searchUrl = `${API_BASE}/search.searchAnything?input=${encodeURIComponent(JSON.stringify({ searchText: username }))}`;
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) throw new Error('search failed');
+    const searchData = await searchRes.json();
+    // tRPC wraps results in result.data
+    const ids = searchData?.result?.data?.userIds || searchData?.userIds || [];
+    if (!ids.length) {
+      status.style.color = 'var(--accent2)';
+      status.textContent = 'No player found with that name.';
+      return;
+    }
+    const userId = ids[0];
+
+    // Step 2: fetch full profile
+    const userUrl = `${API_BASE}/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId }))}`;
+    const userRes = await fetch(userUrl);
+    if (!userRes.ok) throw new Error('profile fetch failed');
+    const userData = await userRes.json();
+    const u = userData?.result?.data || userData;
+
+    // Fill level
+    const level = u?.leveling?.level;
+    if (level != null) document.getElementById('playerLevel').value = level;
+
+    // Fill military rank bonus (militaryRankPercent is on attack skill, e.g. 0.75 = 0.75%)
+    const rankPct = u?.skills?.attack?.militaryRankPercent;
+    if (rankPct != null) document.getElementById('rankBonus').value = rankPct;
+
+    // Fill gear bonuses from equipment values if present
+    const setIf = (id, val) => { if (val != null && !isNaN(val)) document.getElementById(id).value = Math.round(val); };
+    setIf('gearAtk', u?.skills?.attack?.weapon);
+    setIf('gearArmor', u?.skills?.armor?.equipment);
+    setIf('gearDodge', u?.skills?.dodge?.equipment);
+    setIf('gearPrec', u?.skills?.precision?.equipment);
+    setIf('gearCritDmg', u?.skills?.criticalDamages?.equipment);
+
+    // Fill equipped ammo from API (attack.ammoPercent, e.g. 20 = +20%)
+    const ammoPct = u?.skills?.attack?.ammoPercent;
+    if (ammoPct != null && !isNaN(ammoPct)) {
+      const ammoSel = document.getElementById('ammoType');
+      const val = String(Math.round(ammoPct));
+      // If the value isn't already an option, add it so it can be selected
+      if (![...ammoSel.options].some(o => o.value === val)) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = `Equipped Ammo (+${val}%)`;
+        ammoSel.appendChild(opt);
+      }
+      ammoSel.value = val;
+    }
+
+    // Capture current in-game skill levels for build analysis
+    // Map API skill keys -> tool SKILLS keys
+    const s = u?.skills || {};
+    currentBuild = {
+      attack: s.attack?.level ?? 0,
+      precision: s.precision?.level ?? 0,
+      critChance: s.criticalChance?.level ?? 0,
+      critDmg: s.criticalDamages?.level ?? 0,
+      armor: s.armor?.level ?? 0,
+      dodge: s.dodge?.level ?? 0,
+      health: s.health?.level ?? 0,
+      loot: s.lootChance?.level ?? 0,
+      hunger: s.hunger?.level ?? 0,
+    };
+
+    // Capture SP spent on economic/other skills the optimizer doesn't control
+    // (energy, entrepreneurship, production, management) so available SP is accurate.
+    // Each level n costs n SP, total cost for level L = L*(L+1)/2
+    const triCost = (lvl) => (lvl > 0 ? (lvl * (lvl + 1)) / 2 : 0);
+    otherSkillsSP =
+      triCost(s.energy?.level ?? 0) +
+      triCost(s.entrepreneurship?.level ?? 0) +
+      triCost(s.production?.level ?? 0) +
+      triCost(s.management?.level ?? 0);
+
+    // Set companies input from actual companies skill level
+    const compLvl = s.companies?.level ?? 0;
+    document.getElementById('companiesDesired').value = compLvl + 2;
+
+    updateSP();
+    const realName = u?.username || username;
+    status.style.color = 'var(--good)';
+    status.textContent = `✓ Loaded ${realName} (Lv ${level ?? '?'}, rank bonus ${rankPct ?? 0}%)`;
+
+    // Remember username for next visit
+    try { localStorage.setItem('warera_username', username); } catch(e) {}
+
+    // Auto-run analysis comparing current build vs optimal
+    renderAnalysis();
+  } catch (err) {
+    status.style.color = 'var(--accent2)';
+    status.textContent = 'Lookup failed — the API may be blocking browser requests (CORS). Enter values manually.';
+  }
+}
+
+let currentBuild = null;
+let otherSkillsSP = 0;
+
+function getGearAmmoPill() {
+  return {
+    gear: {
+      atk: parseInt(document.getElementById('gearAtk').value)||0,
+      critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
+      armor: parseInt(document.getElementById('gearArmor').value)||0,
+      dodge: parseInt(document.getElementById('gearDodge').value)||0,
+      prec: parseInt(document.getElementById('gearPrec').value)||0,
+    },
+    ammo: parseInt(document.getElementById('ammoType').value)||0,
+    pill: parseInt(document.getElementById('usePill').value)||0,
+    rank: parseInt(document.getElementById('rankBonus').value)||0,
+    foodPct: parseInt(document.getElementById('foodType').value)||0,
+  };
+}
+
+function renderAnalysis() {
+  const area = document.getElementById('analysisArea');
+  if (!currentBuild) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Look up your username first to load your current build.</p></div>';
+    return;
+  }
+  const cfg = getGearAmmoPill();
+  const curFoodHeal = (cfg.foodPct / 100) * SKILLS.health.vals[currentBuild.health];
+  const curStats = calcStats(currentBuild, cfg.gear, cfg.ammo, cfg.pill, cfg.rank, curFoodHeal);
+
+  // Find optimal build using same available SP
+  const best = computeBestBuild();
+
+  const curCases = parseFloat(curStats.casesPerDay);
+  const bestCases = best ? parseFloat(best.stats.casesPerDay) : curCases;
+  const diff = bestCases - curCases;
+  const pctGain = curCases > 0 ? ((diff / curCases) * 100) : 0;
+
+  const skillOrder = [
+    ['attack','Attack'],['precision','Precision'],['critChance','Crit Chance'],
+    ['critDmg','Crit Damage'],['armor','Armor'],['dodge','Dodge'],
+    ['health','Health'],['loot','Loot Chance'],['hunger','Hunger']
+  ];
+
+  area.innerHTML = `
+    <div class="info-box" style="margin-bottom:16px">
+      Comparing <strong>your current in-game build</strong> against the optimal case-farming build for the same skill points.
+    </div>
+    <div class="result-grid">
+      <div class="result-card">
+        <div class="card-title">Your Current Build</div>
+        <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${curStats.casesPerDay}</span></div>
+        <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${curStats.dmgPerDay.toLocaleString()}</span></div>
+        <div class="stat-line"><span class="k">SP Used</span><span class="v">${curStats.spUsed}</span></div>
+        <div class="skill-alloc">
+          <div class="skill-alloc-title">Your Skills</div>
+          <div class="alloc-grid">
+            ${skillOrder.map(([k,name]) => `<div class="alloc-row"><span>${name}</span><span>Lv ${currentBuild[k]}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="result-card highlight">
+        <div class="card-badge">⭐ Optimal</div>
+        <div class="card-title">Best Possible Build</div>
+        <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${best ? best.stats.casesPerDay : '—'}</span></div>
+        <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${best ? best.stats.dmgPerDay.toLocaleString() : '—'}</span></div>
+        <div class="stat-line"><span class="k">SP Used</span><span class="v">${best ? best.stats.spUsed : '—'}</span></div>
+        <div class="skill-alloc">
+          <div class="skill-alloc-title">Optimal Skills</div>
+          <div class="alloc-grid">
+            ${best ? skillOrder.map(([k,name]) => {
+              const changed = best.alloc[k] !== currentBuild[k];
+              return `<div class="alloc-row"><span>${name}</span><span style="${changed?'color:var(--accent);font-weight:600':''}">Lv ${best.alloc[k]}${changed?` (${best.alloc[k]>currentBuild[k]?'+':''}${best.alloc[k]-currentBuild[k]})`:''}</span></div>`;
+            }).join('') : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="result-card" style="margin-top:16px">
+      <div class="card-title">Verdict</div>
+      ${diff > 0.5
+        ? `<div class="stat-line"><span class="k">Potential Improvement</span><span class="v good">+${diff.toFixed(1)} cases/day (+${pctGain.toFixed(0)}%)</span></div>
+           <p style="font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.7">Reallocating your skill points to the optimal build would net you about <strong style="color:var(--accent)">${diff.toFixed(1)} more cases per day</strong>. The highlighted skills above show what to change.</p>`
+        : `<div class="stat-line"><span class="k">Status</span><span class="v good">Already optimal (or within 0.5 cases/day)</span></div>
+           <p style="font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.7">Your current build is already very close to optimal for case farming. Nice work!</p>`
+      }
+    </div>`;
+}
+
+function computeAllBuilds() {
   const playerLevel = parseInt(document.getElementById('playerLevel').value) || 1;
   const availSP = getAvailSP();
   const rank = parseInt(document.getElementById('rankBonus').value) || 0;
   const gear = {
     atk: parseInt(document.getElementById('gearAtk').value)||0,
     critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
-    armor: (parseInt(document.getElementById('gearChest').value)||0) + (parseInt(document.getElementById('gearPants').value)||0),
+    armor: parseInt(document.getElementById('gearArmor').value)||0,
     dodge: parseInt(document.getElementById('gearDodge').value)||0,
     prec: parseInt(document.getElementById('gearPrec').value)||0,
   };
@@ -643,16 +973,10 @@ function optimize() {
   }
 
   const builds = [];
-
-  // Fully exhaustive search over all case-relevant skills:
-  // loot, health, precision, hunger, armor, dodge
-  // attack and critChance are greedy with leftover SP (they only affect damage not cases)
-  // critDamage is always 0 in optimizer (only affects damage)
   const caseSkills = ['loot','health','precision','hunger','armor','dodge'];
 
   function search(idx, spLeft, alloc) {
     if (idx === caseSkills.length) {
-      // Fill remaining SP greedily into attack then critChance for damage tiebreaker
       let rem = spLeft;
       let atkLvl = 0;
       if (canUnlock('attack')) {
@@ -685,8 +1009,17 @@ function optimize() {
   }
 
   search(0, availSP, {});
-
   builds.sort((a,b) => b.score - a.score);
+  return { builds, availSP };
+}
+
+function computeBestBuild() {
+  const { builds } = computeAllBuilds();
+  return builds.length ? builds[0] : null;
+}
+
+function optimize() {
+  const { builds, availSP } = computeAllBuilds();
 
   // De-duplicate top results
   const seen = new Set();
@@ -801,7 +1134,7 @@ function updateManualStats() {
   const gear = {
     atk: parseInt(document.getElementById('gearAtk').value)||0,
     critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
-    armor: (parseInt(document.getElementById('gearChest').value)||0) + (parseInt(document.getElementById('gearPants').value)||0),
+    armor: parseInt(document.getElementById('gearArmor').value)||0,
     dodge: parseInt(document.getElementById('gearDodge').value)||0,
     prec: parseInt(document.getElementById('gearPrec').value)||0,
   };
@@ -830,17 +1163,36 @@ function updateManualStats() {
 }
 
 // ─── Tab Switching ────────────────────────────────────────────────────────────
+function onGearChange() {
+  // Refresh whichever views depend on gear/consumables
+  if (typeof updateManualStats === 'function' && document.getElementById('manualStats') && document.getElementById('manualStats').innerHTML) {
+    updateManualStats();
+  }
+  if (currentBuild && document.getElementById('tab-analysis').style.display !== 'none') {
+    renderAnalysis();
+  }
+}
+
 function switchTab(name, el) {
   document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).style.display = '';
   el.classList.add('active');
   if (name === 'manual') buildManualUI();
+  if (name === 'analysis') renderAnalysis();
 }
 
 // Init
 buildManualUI();
 updateSP();
+// Restore saved username and auto-lookup
+try {
+  const saved = localStorage.getItem('warera_username');
+  if (saved) {
+    document.getElementById('usernameInput').value = saved;
+    fetchPlayer();
+  }
+} catch(e) {}
 </script>
 </body>
 </html>
