@@ -450,11 +450,46 @@
       </div>
       <div class="field">
         <label>Food Type (healing)</label>
-        <select id="foodType" onchange="onGearChange()">
+        <select id="foodType" onchange="applyFoodCostFromMarket(); onGearChange();">
           <option value="10">Bread (10% of max HP)</option>
           <option value="15" selected>Steak (15% of max HP)</option>
           <option value="20">Cooked Fish (20% of max HP)</option>
         </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Economy (profit)</div>
+      <div class="field">
+        <label>Case Sell Price (coins) <small style="color:var(--text-dim)" id="casePriceHint">(market)</small></label>
+        <input type="text" inputmode="decimal" id="casePrice" value="3.6" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Coins per Company per Day</label>
+        <input type="text" inputmode="decimal" id="companyIncome" value="0" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Cost per Food Piece (coins) <small style="color:var(--text-dim)">(market)</small></label>
+        <input type="text" inputmode="decimal" id="foodCost" value="0" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Gloves Cost (coins) <small style="color:var(--text-dim)">(100 durability)</small></label>
+        <input type="text" inputmode="decimal" id="glovesCost" value="0" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Boots Cost (coins) <small style="color:var(--text-dim)">(100 durability)</small></label>
+        <input type="text" inputmode="decimal" id="bootsCost" value="0" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Chest + Pants Cost (coins) <small style="color:var(--text-dim)">(100 durability each)</small></label>
+        <input type="text" inputmode="decimal" id="chestPantsCost" value="0" oninput="onGearChange()">
+      </div>
+      <div class="field">
+        <label>Scrap Price (coins each) <small style="color:var(--text-dim)">(6 scrap per worn piece)</small></label>
+        <input type="text" inputmode="decimal" id="scrapPrice" value="0" oninput="onGearChange()">
+      </div>
+      <div class="info-box" style="margin-top:4px">
+        Case &amp; food prices auto-load from the live market on lookup. Each armor piece has 100 durability and loses 1 per non-dodged hit; replacement cost is subtracted from profit. Set company income (coins/day each) to include it.
       </div>
     </div>
 
@@ -493,20 +528,33 @@
     <div id="tab-guide" style="display:none">
       <div class="section-label">Case Farming Formula</div>
       <div class="formula-block">
-        <span class="comment"># HP pool per hour</span><br>
-        food_heal = food_pct% × max_health<br>
-        effective_hp = health + (hunger × food_heal)<br><br>
-        <span class="comment"># Hits per hour (HP spent per attack, dodge = free hit, 0 HP cost)</span><br>
-        dmg_per_hit = 10 × (1 − armor%)<br>
-        non_dodged_hits = effective_hp / dmg_per_hit<br>
-        total_attempts = non_dodged_hits / (1 − dodge%)<br>
+        <span class="comment"># Armor & dodge use a soft cap (diminishing returns)</span><br>
+        eff_armor = raw_armor / (raw_armor + 40)<br>
+        eff_dodge = raw_dodge / (raw_dodge + 40)<br>
+        <span class="comment"># raw = skill value + gear bonus</span><br><br>
+        <span class="comment"># Food healing</span><br>
+        food_heal = food_pct% × max_health<br><br>
+        <span class="comment"># Hits (HP spent per attack, dodge = free hit, 0 HP cost)</span><br>
+        dmg_per_hit = 10 × (1 − eff_armor)<br>
+        non_dodged_hits = hp_available / dmg_per_hit<br>
+        total_attempts = non_dodged_hits / (1 − eff_dodge)<br>
         landed_hits = total_attempts × precision%<br><br>
         <span class="comment"># Cases only proc on landed hits</span><br>
         cases = landed_hits × loot_chance%<br><br>
-        <span class="comment"># Daily: hour 1 = full HP+hunger, hours 2-24 = regen (carries over)</span><br>
-        hp_regen = max_health × 10% / hour<br>
-        hunger_regen = max_hunger × 10% / hour<br>
-        cases_per_day = cases_hour1 + Σ(cases_hour2..24)<br><br>
+        <span class="comment"># Daily: pure regen over 24 hours (no full-bar burst)</span><br>
+        hp_regen = max_health × 10% / hour (carries over)<br>
+        hunger_regen = max_hunger × 10% / hour (carries over)<br>
+        each hour: spend regen HP + any full food slots<br>
+        cases_per_day = Σ(cases for hours 1..24)<br><br>
+        <span class="comment"># Profit</span><br>
+        food_eaten = full food slots consumed per day<br>
+        armor_wear = non_dodged_hits / 100 (per piece, 100 durability)<br>
+        scrap = armor_wear × 4 pieces × 6 scrap each<br>
+        profit_per_day = cases × case_price + companies × income<br>
+        &nbsp;&nbsp;+ scrap × scrap_price<br>
+        &nbsp;&nbsp;− food_eaten × food_cost<br>
+        &nbsp;&nbsp;− armor_wear × (gloves + boots + chest_pants cost)<br>
+        <span class="comment"># dodged hits don't wear armor; worn pieces become scrap</span><br><br>
         <span class="comment"># Damage (tiebreaker only, does not affect cases)</span><br>
         avg_dmg = attack × (1 + crit_chance% × (crit_dmg% − 1))<br>
         dmg_per_day = avg_dmg × total_landed_hits_per_day<br>
@@ -560,13 +608,25 @@ function totalCost(skill, level) {
   return SKILLS[skill].costs.slice(1, level+1).reduce((a,b)=>a+b, 0);
 }
 
-function calcStats(alloc, gear, ammo, pill, rank, foodHeal) {
+// Parse a number from an input that may use either '.' or ',' as the decimal separator
+function pf(id) {
+  const el = document.getElementById(id);
+  if (!el) return 0;
+  const raw = String(el.value).replace(',', '.');
+  const n = parseFloat(raw);
+  return isNaN(n) ? 0 : n;
+}
+
+function calcStats(alloc, gear, ammo, pill, rank, foodHeal, companyCountOverride, econ) {
   const atk = SKILLS.attack.vals[alloc.attack] * (1 + (gear.atk||0)/100) * (1 + ammo/100) * (1 + pill/100) * (1 + rank/100);
   const prec = Math.min(100, SKILLS.precision.vals[alloc.precision] + (gear.prec||0)) / 100;
   const cc = SKILLS.critChance.vals[alloc.critChance] / 100;
   const cd = (SKILLS.critDmg.vals[alloc.critDmg] + (gear.critDmg||0)) / 100;
-  const armor = Math.min(80, SKILLS.armor.vals[alloc.armor] + (gear.armor||0)) / 100;
-  const dodge = Math.min(80, SKILLS.dodge.vals[alloc.dodge] + (gear.dodge||0)) / 100;
+  // Armor and dodge use a diminishing-returns soft cap: effective = raw / (raw + 40)
+  const rawArmor = SKILLS.armor.vals[alloc.armor] + (gear.armor||0);
+  const rawDodge = SKILLS.dodge.vals[alloc.dodge] + (gear.dodge||0);
+  const armor = rawArmor / (rawArmor + 40);
+  const dodge = rawDodge / (rawDodge + 40);
   const hp = SKILLS.health.vals[alloc.health];
   const hunger = SKILLS.hunger.vals[alloc.hunger];
   const loot = SKILLS.loot.vals[alloc.loot];
@@ -588,51 +648,93 @@ function calcStats(alloc, gear, ammo, pill, rank, foodHeal) {
   const avgDmg = atk * (1 + cc * (cd - 1));
   const totalDmg = avgDmg * landedHits;
 
-  // Daily calculation: hour 1 starts with full HP + full hunger, hours 2-24 use regen amounts
+  // Daily calculation: pure per-hour regen across 24 hours (no full-bar burst at start)
   const hpPerHitSafe = dmgPerNonDodgedHit > 0 ? dmgPerNonDodgedHit : 10;
 
-  // Hour 1: full resources
-  const nonDodgedHour1 = effectiveHp / hpPerHitSafe;
-  const hitsHour1 = dodge < 1 ? nonDodgedHour1 / (1 - dodge) : nonDodgedHour1;
-  const landedHour1 = hitsHour1 * prec;
-  const casesHour1 = landedHour1 * (loot / 100);
-  const dmgHour1 = avgDmg * landedHour1;
-
-  // Hours 2-24: simulate hunger accumulation as decimal with carryover
-  // hunger regens at 10% of max slots per hour (e.g. 7 hunger = 0.7/hr), carries over fractional amounts
+  // Each hour: 10% HP regen + hunger regen (10% of max slots, carries over fractionally)
   const hpRegenPerHour = hp * 0.10;
   const foodHealPerSlot = foodHeal; // foodHeal is already per-slot (foodPct% * hp)
   const hungerRegenRate = hunger * 0.10;
 
-  // Simulate hours 2-24 with both HP and hunger carrying over fractional amounts
+  // Simulate 24 hours with both HP and hunger carrying over fractional amounts
   let totalCasesRegen = 0;
   let totalDmgRegen = 0;
+  let totalFoodEaten = 0;
+  let totalNonDodgedHits = 0;
   let hungerAccum = 0;
   let hpAccum = 0;
-  for (let h = 0; h < 23; h++) {
+  for (let h = 0; h < 24; h++) {
     hungerAccum += hungerRegenRate;
     hpAccum += hpRegenPerHour;
     const slotsAvailable = Math.floor(hungerAccum);
     hungerAccum -= slotsAvailable;
+    totalFoodEaten += slotsAvailable;
     // Total usable HP this hour = accumulated HP regen + food from available hunger slots
     const hpFromFood = slotsAvailable * foodHealPerSlot;
     const totalHpThisHour = hpAccum + hpFromFood;
     // Spend all HP this hour (including carryover)
     hpAccum = 0;
     const nonDodgedThisHour = totalHpThisHour / hpPerHitSafe;
+    totalNonDodgedHits += nonDodgedThisHour;
     const hitsThisHour = dodge < 1 ? nonDodgedThisHour / (1 - dodge) : nonDodgedThisHour;
     const landedThisHour = hitsThisHour * prec;
     totalCasesRegen += landedThisHour * (loot / 100);
     totalDmgRegen += avgDmg * landedThisHour;
   }
 
-  const casesPerDay = casesHour1 + totalCasesRegen;
-  const dmgPerDay = dmgHour1 + totalDmgRegen;
+  const casesPerDay = totalCasesRegen;
+  const dmgPerDay = totalDmgRegen;
 
   // SP used
   const spUsed = Object.keys(alloc).reduce((s, k) => s + totalCost(k, alloc[k]), 0);
 
-  return { atk, prec: prec*100, cc: cc*100, cd: cd*100, armor: armor*100, dodge: dodge*100, hp, effectiveHp, hunger, loot, hits: hits.toFixed(1), expectedCases: expectedCases.toFixed(2), avgDmg: avgDmg.toFixed(0), totalDmg: totalDmg.toFixed(0), casesPerDay: casesPerDay.toFixed(1), dmgPerDay: Math.round(dmgPerDay), spUsed };
+  // Profit/day = cases sold at market price + company income - food cost - armor wear
+  const E = econ || {
+    casePrice: pf('casePrice'),
+    companyIncome: pf('companyIncome'),
+    foodCost: pf('foodCost'),
+    glovesCost: pf('glovesCost'),
+    bootsCost: pf('bootsCost'),
+    chestPantsCost: pf('chestPantsCost'),
+    scrapPrice: pf('scrapPrice'),
+  };
+  const casePrice = E.casePrice;
+  const companyIncome = E.companyIncome;
+  const companyCount = (companyCountOverride != null) ? companyCountOverride : (parseInt(document.getElementById('companiesDesired').value) || 2);
+  const foodCost = E.foodCost;
+  const glovesCost = E.glovesCost;
+  const bootsCost = E.bootsCost;
+  const chestPantsCost = E.chestPantsCost;
+  const scrapPrice = E.scrapPrice;
+
+  const caseProfit = casesPerDay * casePrice;
+  const companyProfit = companyCount * companyIncome;
+  const foodCostPerDay = totalFoodEaten * foodCost;
+
+  // Armor durability: each piece has 100 durability, loses 1 per non-dodged hit.
+  // 4 pieces (gloves, boots, chest, pants) each wear at the same rate.
+  // Cost per piece per hit = pieceCost / 100. Chest+pants cost is for both pieces combined.
+  const piecesWornPerDay = totalNonDodgedHits / 100; // fraction of EACH piece consumed per day
+  const armorCostPerDay = piecesWornPerDay * (glovesCost + bootsCost + chestPantsCost);
+
+  // Each fully-worn piece becomes 6 scrap (uncommon). 4 pieces wear simultaneously,
+  // so scrap pieces per day = piecesWornPerDay × 4, each giving 6 scrap.
+  const scrapPerDay = piecesWornPerDay * 4 * 6;
+  const scrapIncomePerDay = scrapPerDay * scrapPrice;
+
+  const profitPerDay = caseProfit + companyProfit + scrapIncomePerDay - foodCostPerDay - armorCostPerDay;
+
+  // Per-hour figures: daily total averaged over 24 hours
+  const casesPerHour = totalCasesRegen / 24;
+  const dmgPerHour = totalDmgRegen / 24;
+  const caseProfitPerHour = casesPerHour * casePrice;
+  const companyProfitPerHour = companyProfit / 24; // company income spread across the day
+  const foodCostPerHour = foodCostPerDay / 24;
+  const armorCostPerHour = armorCostPerDay / 24;
+  const scrapIncomePerHour = scrapIncomePerDay / 24;
+  const profitPerHour = caseProfitPerHour + companyProfitPerHour + scrapIncomePerHour - foodCostPerHour - armorCostPerHour;
+
+  return { atk, prec: prec*100, cc: cc*100, cd: cd*100, armor: armor*100, dodge: dodge*100, hp, effectiveHp, hunger, loot, hits: hits.toFixed(1), expectedCases: expectedCases.toFixed(2), avgDmg: avgDmg.toFixed(0), totalDmg: totalDmg.toFixed(0), casesPerDay: casesPerDay.toFixed(1), dmgPerDay: Math.round(dmgPerDay), caseProfit: caseProfit.toFixed(0), companyProfit: companyProfit.toFixed(0), foodCostPerDay: foodCostPerDay.toFixed(0), foodEaten: Math.round(totalFoodEaten), armorCostPerDay: armorCostPerDay.toFixed(0), scrapIncomePerDay: scrapIncomePerDay.toFixed(0), nonDodgedHits: Math.round(totalNonDodgedHits), companyCount, profitPerDay: profitPerDay.toFixed(0), profitPerDayNum: profitPerDay, casesPerHour: casesPerHour.toFixed(2), dmgPerHour: Math.round(dmgPerHour), profitPerHour: profitPerHour.toFixed(1), spUsed };
 }
 
 function score(stats) {
@@ -648,8 +750,7 @@ function getAvailSP() {
   // companies vals = [2,3,4,...,12], so skill level = desired - 2 (clamped 0-10)
   const companiesLvl = Math.max(0, Math.min(10, companiesDesired - 2));
   const companySPCost = totalCost('companies', companiesLvl);
-  // Also subtract SP spent on economic skills (energy, entrepreneurship, production, management)
-  return Math.max(0, totalSP - companySPCost - (otherSkillsSP || 0));
+  return Math.max(0, totalSP - companySPCost);
 }
 
 function updateSP() {
@@ -835,15 +936,9 @@ async function fetchPlayer() {
       hunger: s.hunger?.level ?? 0,
     };
 
-    // Capture SP spent on economic/other skills the optimizer doesn't control
-    // (energy, entrepreneurship, production, management) so available SP is accurate.
-    // Each level n costs n SP, total cost for level L = L*(L+1)/2
-    const triCost = (lvl) => (lvl > 0 ? (lvl * (lvl + 1)) / 2 : 0);
-    otherSkillsSP =
-      triCost(s.energy?.level ?? 0) +
-      triCost(s.entrepreneurship?.level ?? 0) +
-      triCost(s.production?.level ?? 0) +
-      triCost(s.management?.level ?? 0);
+    // Economic skills (energy, entrepreneurship, production, management) are ignored —
+    // the optimizer works from full max SP minus companies only.
+    otherSkillsSP = 0;
 
     // Set companies input from actual companies skill level
     const compLvl = s.companies?.level ?? 0;
@@ -857,11 +952,42 @@ async function fetchPlayer() {
     // Remember username for next visit
     try { localStorage.setItem('warera_username', username); } catch(e) {}
 
+    // Fetch live case market price (case1) from the market
+    try {
+      const priceRes = await fetch(`${API_BASE}/itemTrading.getPrices`);
+      if (priceRes.ok) {
+        const priceData = await priceRes.json();
+        const prices = priceData?.result?.data || priceData;
+        window.__marketPrices = prices;
+        const casePrice = prices?.case1;
+        if (casePrice != null && !isNaN(casePrice)) {
+          document.getElementById('casePrice').value = Number(casePrice).toFixed(2);
+          const hint = document.getElementById('casePriceHint');
+          if (hint) hint.textContent = '(live market)';
+        }
+        // Set food cost from the market price of the currently selected food type
+        applyFoodCostFromMarket();
+      }
+    } catch(e) {}
+
     // Auto-run analysis comparing current build vs optimal
     renderAnalysis();
   } catch (err) {
     status.style.color = 'var(--accent2)';
     status.textContent = 'Lookup failed — the API may be blocking browser requests (CORS). Enter values manually.';
+  }
+}
+
+// Map food dropdown value -> market item code, then apply its price to the food cost field
+function applyFoodCostFromMarket() {
+  const prices = window.__marketPrices;
+  if (!prices) return;
+  const foodVal = document.getElementById('foodType').value;
+  const codeByVal = { '10': 'bread', '15': 'steak', '20': 'cookedFish' };
+  const code = codeByVal[foodVal];
+  const price = code ? prices[code] : null;
+  if (price != null && !isNaN(price)) {
+    document.getElementById('foodCost').value = Number(price).toFixed(2);
   }
 }
 
@@ -917,6 +1043,8 @@ function renderAnalysis() {
         <div class="card-title">Your Current Build</div>
         <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${curStats.casesPerDay}</span></div>
         <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${curStats.dmgPerDay.toLocaleString()}</span></div>
+        <div class="stat-line"><span class="k">Profit/Day (coins)</span><span class="v good" style="font-size:15px">${parseInt(curStats.profitPerDay).toLocaleString()}</span></div>
+        <div class="stat-line"><span class="k">Profit/Hour (coins)</span><span class="v good">${curStats.profitPerHour}</span></div>
         <div class="stat-line"><span class="k">SP Used</span><span class="v">${curStats.spUsed}</span></div>
         <div class="skill-alloc">
           <div class="skill-alloc-title">Your Skills</div>
@@ -930,6 +1058,8 @@ function renderAnalysis() {
         <div class="card-title">Best Possible Build</div>
         <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${best ? best.stats.casesPerDay : '—'}</span></div>
         <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${best ? best.stats.dmgPerDay.toLocaleString() : '—'}</span></div>
+        <div class="stat-line"><span class="k">Profit/Day (coins)</span><span class="v good" style="font-size:15px">${best ? parseInt(best.stats.profitPerDay).toLocaleString() : '—'}</span></div>
+        <div class="stat-line"><span class="k">Profit/Hour (coins)</span><span class="v good">${best ? best.stats.profitPerHour : '—'}</span></div>
         <div class="stat-line"><span class="k">SP Used</span><span class="v">${best ? best.stats.spUsed : '—'}</span></div>
         <div class="skill-alloc">
           <div class="skill-alloc-title">Optimal Skills</div>
@@ -972,6 +1102,17 @@ function computeAllBuilds() {
     return playerLevel >= SKILLS[skill].unlocksAt;
   }
 
+  const econ = {
+    casePrice: pf('casePrice'),
+    companyIncome: pf('companyIncome'),
+    foodCost: pf('foodCost'),
+    glovesCost: pf('glovesCost'),
+    bootsCost: pf('bootsCost'),
+    chestPantsCost: pf('chestPantsCost'),
+    scrapPrice: pf('scrapPrice'),
+  };
+  const companyCount = parseInt(document.getElementById('companiesDesired').value) || 2;
+
   const builds = [];
   const caseSkills = ['loot','health','precision','hunger','armor','dodge'];
 
@@ -992,7 +1133,7 @@ function computeAllBuilds() {
       }
       const fullAlloc = { ...alloc, attack: atkLvl, critChance: ccLvl, critDmg: 0 };
       const foodHeal = (foodPct / 100) * SKILLS.health.vals[fullAlloc.health];
-      const stats = calcStats(fullAlloc, gear, ammo, pill, rank, foodHeal);
+      const stats = calcStats(fullAlloc, gear, ammo, pill, rank, foodHeal, companyCount, econ);
       builds.push({ alloc: fullAlloc, stats, score: score(stats) });
       return;
     }
@@ -1016,6 +1157,79 @@ function computeAllBuilds() {
 function computeBestBuild() {
   const { builds } = computeAllBuilds();
   return builds.length ? builds[0] : null;
+}
+
+// Profit-optimized build: tries every company count (2-12), and for each,
+// searches all skill allocations scoring by profit/day. Returns the global best.
+function computeBestProfitBuild() {
+  const playerLevel = parseInt(document.getElementById('playerLevel').value) || 1;
+  const rank = parseInt(document.getElementById('rankBonus').value) || 0;
+  const gear = {
+    atk: parseInt(document.getElementById('gearAtk').value)||0,
+    critDmg: parseInt(document.getElementById('gearCritDmg').value)||0,
+    armor: parseInt(document.getElementById('gearArmor').value)||0,
+    dodge: parseInt(document.getElementById('gearDodge').value)||0,
+    prec: parseInt(document.getElementById('gearPrec').value)||0,
+  };
+  const ammo = parseInt(document.getElementById('ammoType').value)||0;
+  const pill = parseInt(document.getElementById('usePill').value)||0;
+  const foodPct = parseInt(document.getElementById('foodType').value)||0;
+  const totalSP = 4 + (playerLevel - 1) * 4;
+
+  // Read all economy inputs ONCE (avoids millions of DOM reads in the hot loop)
+  const econ = {
+    casePrice: pf('casePrice'),
+    companyIncome: pf('companyIncome'),
+    foodCost: pf('foodCost'),
+    glovesCost: pf('glovesCost'),
+    bootsCost: pf('bootsCost'),
+    chestPantsCost: pf('chestPantsCost'),
+    scrapPrice: pf('scrapPrice'),
+  };
+
+  function canUnlock(skill) { return playerLevel >= SKILLS[skill].unlocksAt; }
+
+  let best = null;
+  const caseSkills = ['loot','health','precision','hunger','armor','dodge'];
+
+  // The case-side profit (cases - food - armor wear) depends only on skills + SP budget.
+  // Company profit (count x income) is a flat add per count. Since each company count
+  // maps to one SP budget, we search skills once per count and keep the global best.
+  for (let companyCount = 2; companyCount <= 12; companyCount++) {
+    const companiesLvl = Math.max(0, Math.min(10, companyCount - 2));
+    const companySPCost = totalCost('companies', companiesLvl);
+    const availSP = totalSP - companySPCost;
+    if (availSP < 0) continue;
+
+    function search(idx, spLeft, alloc) {
+      if (idx === caseSkills.length) {
+        let rem = spLeft, atkLvl = 0;
+        if (canUnlock('attack')) {
+          while (atkLvl < 10 && rem >= SKILLS.attack.costs[atkLvl+1]) { rem -= SKILLS.attack.costs[atkLvl+1]; atkLvl++; }
+        }
+        let ccLvl = 0;
+        if (canUnlock('critChance')) {
+          while (ccLvl < 10 && rem >= SKILLS.critChance.costs[ccLvl+1]) { rem -= SKILLS.critChance.costs[ccLvl+1]; ccLvl++; }
+        }
+        const fullAlloc = { ...alloc, attack: atkLvl, critChance: ccLvl, critDmg: 0 };
+        const foodHeal = (foodPct / 100) * SKILLS.health.vals[fullAlloc.health];
+        const stats = calcStats(fullAlloc, gear, ammo, pill, rank, foodHeal, companyCount, econ);
+        if (!best || stats.profitPerDayNum > best.stats.profitPerDayNum) {
+          best = { alloc: fullAlloc, stats, companyCount };
+        }
+        return;
+      }
+      const skill = caseSkills[idx];
+      if (!canUnlock(skill)) { search(idx + 1, spLeft, { ...alloc, [skill]: 0 }); return; }
+      for (let lvl = 0; lvl <= 10; lvl++) {
+        const cost = totalCost(skill, lvl);
+        if (cost > spLeft) break;
+        search(idx + 1, spLeft - cost, { ...alloc, [skill]: lvl });
+      }
+    }
+    search(0, availSP, {});
+  }
+  return best;
 }
 
 function optimize() {
@@ -1056,6 +1270,8 @@ function renderResults(builds, availSP) {
           <div class="card-title">${isTop ? 'Optimal' : `Alt Build ${i}`}</div>
           <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${stats.casesPerDay}</span></div>
           <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${stats.dmgPerDay.toLocaleString()}</span></div>
+          <div class="stat-line"><span class="k">Profit/Day (coins)</span><span class="v good" style="font-size:15px">${parseInt(stats.profitPerDay).toLocaleString()}</span></div>
+          <div class="stat-line"><span class="k">Profit/Hour (coins)</span><span class="v good">${stats.profitPerHour}</span></div>
           <div class="stat-line"><span class="k">Loot Chance/Hit</span><span class="v accent">${stats.loot}%</span></div>
           <div class="stat-line"><span class="k">Avg Damage/Hit</span><span class="v">${stats.avgDmg}</span></div>
           <div class="stat-line"><span class="k">Expected Damage/Battle</span><span class="v accent">${stats.totalDmg}</span></div>
@@ -1150,6 +1366,8 @@ function updateManualStats() {
       <div class="card-title">Live Preview</div>
       <div class="stat-line"><span class="k">Expected Cases/Day</span><span class="v good" style="font-size:15px">${stats.casesPerDay}</span></div>
       <div class="stat-line"><span class="k">Expected Damage/Day</span><span class="v accent">${stats.dmgPerDay.toLocaleString()}</span></div>
+      <div class="stat-line"><span class="k">Profit/Day (coins)</span><span class="v good" style="font-size:15px">${parseInt(stats.profitPerDay).toLocaleString()}</span></div>
+      <div class="stat-line"><span class="k">Profit/Hour (coins)</span><span class="v good">${stats.profitPerHour}</span></div>
       <div class="stat-line"><span class="k">Loot Chance/Hit</span><span class="v accent">${stats.loot}%</span></div>
       <div class="stat-line"><span class="k">Avg Damage/Hit</span><span class="v">${stats.avgDmg}</span></div>
       <div class="stat-line"><span class="k">Expected Damage/Battle</span><span class="v accent">${stats.totalDmg}</span></div>
@@ -1157,19 +1375,22 @@ function updateManualStats() {
       <div class="stat-line"><span class="k">Effective HP (w/ food)</span><span class="v good">${stats.effectiveHp} HP</span></div>
       <div class="stat-line"><span class="k">Precision</span><span class="v">${stats.prec.toFixed(0)}%</span></div>
       <div class="stat-line"><span class="k">Crit Chance</span><span class="v">${stats.cc.toFixed(0)}%</span></div>
-      <div class="stat-line"><span class="k">Armor</span><span class="v">${stats.armor.toFixed(0)}%</span></div>
-      <div class="stat-line"><span class="k">Dodge</span><span class="v">${stats.dodge.toFixed(0)}%</span></div>
+      <div class="stat-line"><span class="k">Armor (effective)</span><span class="v">${stats.armor.toFixed(0)}%</span></div>
+      <div class="stat-line"><span class="k">Dodge (effective)</span><span class="v">${stats.dodge.toFixed(0)}%</span></div>
     </div>`;
 }
 
 // ─── Tab Switching ────────────────────────────────────────────────────────────
+let gearChangeTimer = null;
 function onGearChange() {
-  // Refresh whichever views depend on gear/consumables
+  // Manual planner preview is cheap — update it immediately
   if (typeof updateManualStats === 'function' && document.getElementById('manualStats') && document.getElementById('manualStats').innerHTML) {
     updateManualStats();
   }
+  // The analysis tab runs heavy exhaustive searches, so debounce it to keep typing responsive
   if (currentBuild && document.getElementById('tab-analysis').style.display !== 'none') {
-    renderAnalysis();
+    clearTimeout(gearChangeTimer);
+    gearChangeTimer = setTimeout(() => renderAnalysis(), 400);
   }
 }
 
