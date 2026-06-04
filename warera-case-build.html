@@ -485,7 +485,7 @@
         <input type="text" inputmode="decimal" id="chestPantsCost" value="0" oninput="onGearChange()">
       </div>
       <div class="field">
-        <label>Scrap Price (coins each) <small style="color:var(--text-dim)">(6 scrap per worn piece)</small></label>
+        <label>Scrap Price (coins each) <small style="color:var(--text-dim)">(market · 6 per worn piece)</small></label>
         <input type="text" inputmode="decimal" id="scrapPrice" value="0" oninput="onGearChange()">
       </div>
       <div class="info-box" style="margin-top:4px">
@@ -964,6 +964,11 @@ async function fetchPlayer() {
           document.getElementById('casePrice').value = Number(casePrice).toFixed(2);
           const hint = document.getElementById('casePriceHint');
           if (hint) hint.textContent = '(live market)';
+        }
+        // Set scrap price from market (item code: scraps)
+        const scrapPrice = prices?.scraps;
+        if (scrapPrice != null && !isNaN(scrapPrice)) {
+          document.getElementById('scrapPrice').value = Number(scrapPrice).toFixed(3);
         }
         // Set food cost from the market price of the currently selected food type
         applyFoodCostFromMarket();
